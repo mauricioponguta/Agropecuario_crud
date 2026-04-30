@@ -1,52 +1,117 @@
 package controllers
 
 import (
+	"agropecuario_crud/config"
+	"agropecuario_crud/models"
 	"encoding/json"
 	"net/http"
 
-	"agropecuario_crud/config"
-	"agropecuario_crud/models"
+	"github.com/gorilla/mux"
 )
 
-func GetRelaciones(w http.ResponseWriter, r *http.Request) {
-	query := `
-	SELECT id_precio_subasta, id_subasta, id_categoria_ganado, activo
-	FROM agropecuario.Tr_PrecioSubastaGanado
-	`
+// Helper respuesta JSON
+func respondJSON(w http.ResponseWriter, status int, payload interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(payload)
+}
 
-	rows, err := config.DB.Query(query)
+// GET ALL
+func GetCategoriasGanado(w http.ResponseWriter, r *http.Request) {
+	rows, err := config.DB.Query(`
+		SELECT id_categoria_ganado, codigo, descripcion, activo
+		FROM agropecuario.categoria_ganado
+	`)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		respondJSON(w, 500, map[string]string{"error": err.Error()})
 		return
 	}
 	defer rows.Close()
 
-	var relaciones []models.PrecioSubastaGanado
+	var list []models.CategoriaGanado
 
 	for rows.Next() {
-		var rel models.PrecioSubastaGanado
-		rows.Scan(&rel.ID, &rel.IdSubasta, &rel.IdCategoriaGanado, &rel.Activo)
-		relaciones = append(relaciones, rel)
+		var c models.CategoriaGanado
+		rows.Scan(&c.Id_categoria_ganado, &c.Codigo, &c.Descripcion, &c.Activo)
+		list = append(list, c)
 	}
 
-	json.NewEncoder(w).Encode(relaciones)
+	respondJSON(w, 200, list)
 }
 
-func CreateRelacion(w http.ResponseWriter, r *http.Request) {
-	var rel models.PrecioSubastaGanado
-	json.NewDecoder(r.Body).Decode(&rel)
+// GET BY ID
+func GetCategoriaGanadoByID(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["id"]
 
-	query := `
-	INSERT INTO agropecuario.Tr_PrecioSubastaGanado
-	(id_subasta, id_categoria_ganado, activo)
-	VALUES ($1, $2, $3)
-	`
+	var c models.CategoriaGanado
 
-	_, err := config.DB.Exec(query, rel.IdSubasta, rel.IdCategoriaGanado, rel.Activo)
+	err := config.DB.QueryRow(`
+		SELECT id_categoria_ganado, codigo, descripcion, activo
+		FROM agropecuario.categoria_ganado
+		WHERE id_categoria_ganado = $1
+	`, id).Scan(&c.Id_categoria_ganado, &c.Codigo, &c.Descripcion, &c.Activo)
+
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		respondJSON(w, 404, map[string]string{"error": "Id no encontrado"})
 		return
 	}
 
-	json.NewEncoder(w).Encode(map[string]string{"message": "relación creada"})
+	respondJSON(w, 200, c)
+}
+
+// CREATE
+func CreateCategoriaGanado(w http.ResponseWriter, r *http.Request) {
+	var c models.CategoriaGanado
+	json.NewDecoder(r.Body).Decode(&c)
+
+	err := config.DB.QueryRow(`
+		INSERT INTO agropecuario.categoria_ganado (codigo, descripcion, activo)
+		VALUES ($1, $2, $3)
+		RETURNING id_categoria_ganado
+	`, c.Codigo, c.Descripcion, true).Scan(&c.Id_categoria_ganado)
+
+	if err != nil {
+		respondJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+
+	respondJSON(w, 201, c)
+}
+
+// UPDATE
+func UpdateCategoriaGanado(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["id"]
+
+	var c models.CategoriaGanado
+	json.NewDecoder(r.Body).Decode(&c)
+
+	_, err := config.DB.Exec(`
+		UPDATE agropecuario.categoria_ganado
+		SET codigo = $1, descripcion = $2
+		WHERE id_categoria_ganado = $3
+	`, c.Codigo, c.Descripcion, id)
+
+	if err != nil {
+		respondJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+
+	respondJSON(w, 200, map[string]string{"message": "Dato actualizado"})
+}
+
+// DELETE
+func DeleteCategoriaGanado(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["id"]
+
+	_, err := config.DB.Exec(`
+		DELETE FROM agropecuario.categoria_ganado
+		WHERE id_categoria_ganado = $1
+	`, id)
+
+	if err != nil {
+		respondJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+
+	respondJSON(w, 200, map[string]string{"message": "Dato eliminado"})
 }

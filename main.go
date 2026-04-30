@@ -1,35 +1,42 @@
 package main
 
 import (
-	"fmt"
-	"log"
-	"net/http"
-
 	"agropecuario_crud/config"
 	"agropecuario_crud/routes"
+	"log"
+	"net/http"
 
 	"github.com/gorilla/mux"
 )
 
+// middleware CORS
+func enableCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+		if r.Method == "OPTIONS" {
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 func main() {
 
-	// Inicializar conexión a la base de datos
+	// DB
 	config.ConnectDB()
 
-	// Crear router
+	// Router
 	r := mux.NewRouter()
 
-	// Registrar rutas
-	routes.SubastaRoutes(r)
+	// Registrar rutas (igual que tu ejemplo)
+	routes.RegisterCategoriaGanadoRoutes(r)
 
-	// Puerto del servidor
-	port := "8082"
+	log.Println("Servidor corriendo en el puerto :8082")
 
-	fmt.Println("Servidor corriendo en http://localhost:" + port)
-
-	// Levantar servidor
-	err := http.ListenAndServe(":"+port, r)
-	if err != nil {
-		log.Fatal(err)
-	}
+	http.ListenAndServe(":8082", enableCORS(r))
 }
