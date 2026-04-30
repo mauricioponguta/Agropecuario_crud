@@ -35,6 +35,7 @@ func main() {
 
 	// Registrar rutas (igual que tu ejemplo)
 	routes.RegisterCategoriaGanadoRoutes(r)
+	routes.RegisterSubastaRoutes(r)
 
 	log.Println("Servidor corriendo en el puerto :8082")
 
