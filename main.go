@@ -23,7 +23,7 @@ func main() {
 	routes.SubastaRoutes(r)
 
 	// Puerto del servidor
-	port := "3000"
+	port := "8082"
 
 	fmt.Println("Servidor corriendo en http://localhost:" + port)
 
