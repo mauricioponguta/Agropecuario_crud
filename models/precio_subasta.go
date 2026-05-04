@@ -1,8 +1,12 @@
 package models
 
-type PrecioSubasta struct {
-	Id_precio_subasta   int  `json:"id"`
-	Id_subasta          int  `json:"id_subasta"`
-	Id_categoria_ganado int  `json:"id_categoria_ganado"`
-	Activo              bool `json:"activo"`
+import "time"
+
+type PrecioSubastaGanado struct {
+	IDPrecioSubasta   int       `json:"id_precio_subasta"`
+	IDSubasta         int       `json:"id_subasta"`
+	IDCategoriaGanado int       `json:"id_categoria_ganado"`
+	Activo            bool      `json:"activo"`
+	FechaCreacion     time.Time `json:"fecha_creacion"`
+	FechaModificacion time.Time `json:"fecha_modificacion"`
 }
