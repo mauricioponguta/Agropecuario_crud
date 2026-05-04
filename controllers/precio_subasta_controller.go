@@ -3,84 +3,112 @@ package controllers
 import (
 	"agropecuario_crud/config"
 	"agropecuario_crud/models"
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
-	"github.com/gorilla/mux"
+	"github.com/gorilla/mux" // Libreria para crear rutas
 )
 
-// GET ALL (con JOIN)
-func GetPreciosSubasta(w http.ResponseWriter, r *http.Request) {
-	rows, err := config.DB.Query(`
-		SELECT 
-			ps.id_precio_subasta,
-			ps.id_subasta,
-			s.ubicacion,
-			ps.id_categoria_ganado,
-			c.codigo,
-			ps.activo
-		FROM agropecuario."tr_precioSubastaGanado" ps
-		JOIN agropecuario.subasta s ON ps.id_subasta = s.id_subasta
-		JOIN agropecuario.categoria_ganado c ON ps.id_categoria_ganado = c.id_categoria_ganado
-	`)
+// GetPreciosSubastaGanado obtiene todos los precios de subasta ganado con filtros opcionales
+func GetPreciosSubastaGanado(w http.ResponseWriter, r *http.Request) {
+	query := "SELECT id_precio_subasta, id_subasta, id_categoria_ganado, activo, fecha_creacion, fecha_modificacion FROM \"tr_precioSubastaGanado\" WHERE 1=1"
+
+	idSubasta := r.URL.Query().Get("id_subasta")
+	idCategoriaGanado := r.URL.Query().Get("id_categoria_ganado")
+
+	if idSubasta != "" {
+		query += " AND id_subasta = " + idSubasta
+	}
+
+	if idCategoriaGanado != "" {
+		query += " AND id_categoria_ganado = " + idCategoriaGanado
+	}
+
+	rows, err := config.DB.Query(query)
 	if err != nil {
 		respondJSON(w, 500, map[string]string{"error": err.Error()})
 		return
 	}
 	defer rows.Close()
 
-	var list []map[string]interface{}
+	var list []models.PrecioSubastaGanado
 
 	for rows.Next() {
-		var id, idSubasta, idCategoria int
-		var ubicacion, codigo string
-		var activo bool
-
-		rows.Scan(&id, &idSubasta, &ubicacion, &idCategoria, &codigo, &activo)
-
-		item := map[string]interface{}{
-			"id": id,
-			"id_subasta": idSubasta,
-			"ubicacion": ubicacion,
-			"id_categoria_ganado": idCategoria,
-			"categoria_codigo": codigo,
-			"activo": activo,
-		}
-
-		list = append(list, item)
+		var p models.PrecioSubastaGanado
+		rows.Scan(&p.IDPrecioSubasta, &p.IDSubasta, &p.IDCategoriaGanado, &p.Activo, &p.FechaCreacion, &p.FechaModificacion)
+		list = append(list, p)
 	}
 
 	respondJSON(w, 200, list)
 }
 
-// CREATE (valida relaciones)
-func CreatePrecioSubasta(w http.ResponseWriter, r *http.Request) {
-	var p models.PrecioSubasta
+// GetPrecioSubastaGanadoByID obtiene un precio de subasta ganado por su ID
+func GetPrecioSubastaGanadoByID(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+	id := params["id"]
+
+	fmt.Printf("ID recibido: %s\n", id) // Imprime el ID recibido para depuración
+
+	var p models.PrecioSubastaGanado
+
+	err := config.DB.QueryRow(
+		"SELECT id_precio_subasta, id_subasta, id_categoria_ganado, activo, fecha_creacion, fecha_modificacion FROM \"tr_precioSubastaGanado\" WHERE id_precio_subasta = $1",
+		id,
+	).Scan(&p.IDPrecioSubasta, &p.IDSubasta, &p.IDCategoriaGanado, &p.Activo, &p.FechaCreacion, &p.FechaModificacion)
+
+	if err == sql.ErrNoRows {
+		respondJSON(w, 404, map[string]string{"error": "Id no encontrado"})
+		return
+	} else if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	respondJSON(w, 200, p)
+}
+
+// CreatePrecioSubastaGanado crea un nuevo precio de subasta ganado
+func CreatePrecioSubastaGanado(w http.ResponseWriter, r *http.Request) {
+	var p models.PrecioSubastaGanado
+
 	json.NewDecoder(r.Body).Decode(&p)
 
-	err := config.DB.QueryRow(`
-		INSERT INTO agropecuario."tr_precioSubastaGanado"
-		(id_subasta, id_categoria_ganado, activo)
-		VALUES ($1, $2, $3)
-		RETURNING id_precio_subasta
-	`, p.Id_subasta, p.Id_categoria_ganado, true).Scan(&p.Id_precio_subasta)
+	error := config.DB.QueryRow(
+		"INSERT INTO \"tr_precioSubastaGanado\" (id_subasta, id_categoria_ganado, activo) VALUES ($1, $2, $3) RETURNING id_precio_subasta, fecha_creacion, fecha_modificacion",
+		p.IDSubasta, p.IDCategoriaGanado, p.Activo,
+	).Scan(&p.IDPrecioSubasta, &p.FechaCreacion, &p.FechaModificacion)
 
+	if error != nil {
+		respondJSON(w, 500, map[string]string{"error": error.Error()})
+		return
+	}
+	respondJSON(w, 201, p)
+}
+
+// UpdatePrecioSubastaGanado actualiza un precio de subasta ganado existente
+func UpdatePrecioSubastaGanado(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["id"]
+	var p models.PrecioSubastaGanado
+	json.NewDecoder(r.Body).Decode(&p)
+
+	_, err := config.DB.Exec(
+		"UPDATE \"tr_precioSubastaGanado\" SET id_subasta = $1, id_categoria_ganado = $2, activo = $3, fecha_modificacion = now() WHERE id_precio_subasta = $4",
+		p.IDSubasta, p.IDCategoriaGanado, p.Activo, id,
+	)
 	if err != nil {
 		respondJSON(w, 500, map[string]string{"error": err.Error()})
 		return
 	}
-
-	respondJSON(w, 201, p)
+	respondJSON(w, 200, map[string]string{"message": "Dato actualizado"})
 }
 
-// DELETE
-func DeletePrecioSubasta(w http.ResponseWriter, r *http.Request) {
+// DeletePrecioSubastaGanado elimina un precio de subasta ganado
+func DeletePrecioSubastaGanado(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
 
-	_, err := config.DB.Exec(`
-		DELETE FROM agropecuario."tr_precioSubastaGanado"
-		WHERE id_precio_subasta = $1
-	`, id)
+	_, err := config.DB.Exec("DELETE FROM \"tr_precioSubastaGanado\" WHERE id_precio_subasta = $1", id)
 
 	if err != nil {
 		respondJSON(w, 500, map[string]string{"error": err.Error()})
